@@ -1,0 +1,12 @@
+<html>
+<body>
+Reports <code>*alias</code> references to YAML anchors that are not defined
+in the current file or any locally included files.
+<br><br>
+<b>Example:</b>
+<pre>
+build-job:
+  &lt;&lt;: *undefined-anchor  # highlighted as error
+</pre>
+</body>
+</html>

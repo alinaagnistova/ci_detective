@@ -1,0 +1,98 @@
+<idea-plugin>
+    <id>com.detective.ci-detective</id>
+    <name>CI Detective for Gitlab</name>
+    <version>1.0.0</version>
+    <vendor email="agnistova1@gmail.com">Alina Agnistova</vendor>
+
+    <description>
+        Static analysis and navigation for GitLab CI/CD pipeline configurations.
+        Supports include directives, extends navigation, and validation.
+    </description>
+
+    <idea-version since-build="223" until-build="261.*"/>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.yaml</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <gotoDeclarationHandler
+                implementation="com.detective.navigation.GitlabCiGotoDeclarationHandler"/>
+        <localInspection
+                language="yaml"
+                shortName="MissingLocalIncludeInspection"
+                displayName="Missing local include file"
+                groupName="CI Detective"
+                enabledByDefault="true"
+                level="ERROR"
+                implementationClass="com.detective.inspection.MissingLocalIncludeInspection"/>
+
+        <localInspection
+                language="yaml"
+                shortName="MissingExtendsJobInspection"
+                displayName="Missing extends job template"
+                groupName="CI Detective"
+                enabledByDefault="true"
+                level="ERROR"
+                implementationClass="com.detective.inspection.MissingExtendsJobInspection"/>
+
+        <localInspection
+                language="yaml"
+                shortName="MissingAnchorInspection"
+                displayName="Missing YAML anchor definition"
+                groupName="CI Detective"
+                enabledByDefault="true"
+                level="ERROR"
+                implementationClass="com.detective.inspection.MissingAnchorInspection"/>
+        <lang.inspectionSuppressor
+                language="yaml"
+                implementationClass="com.detective.inspection.YamlAliasInspectionSuppressor"/>
+        <applicationConfigurable
+                parentId="tools"
+                displayName="CI Detective for Gitlab"
+                id="com.detective.settings.GitlabCiSettingsConfigurable"
+                instance="com.detective.settings.GitlabCiSettingsConfigurable"/>
+        <psi.referenceContributor
+                language="yaml"
+                implementation="com.detective.reference.RemoteIncludeReferenceContributor"/>
+        <psi.referenceContributor
+                language="yaml"
+                implementation="com.detective.reference.GitlabCiReferenceContributor"/>
+        <annotator
+                language="yaml"
+                implementationClass="com.detective.annotation.GitlabCiAnnotator"/>
+        <lang.documentationProvider
+                language="yaml"
+                implementationClass="com.detective.documentation.GitlabCiDocumentationProvider"
+                order="first"/>
+        <findUsagesHandlerFactory
+                implementation="com.detective.findUsages.GitlabCiFindUsagesHandlerFactory"/>
+        <findUsagesHandlerFactory
+                implementation="com.detective.findUsages.GitlabCiVariableFindUsagesHandlerFactory"/>
+        <notificationGroup
+                id="CI Detective"
+                displayType="BALLOON"
+                isLogByDefault="false"/>
+
+    </extensions>
+    <applicationListeners>
+        <listener
+                class="com.detective.background.GitlabCiFileListener"
+                topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    </applicationListeners>
+    <actions>
+        <action
+                id="com.detective.action.GotoDeclarationAction"
+                class="com.detective.action.GotoDeclarationAction"
+                text="Go to Declaration"
+                description="Navigate to the declaration of the include or extends">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+        </action>
+        <action
+                id="com.detective.action.InvalidateCacheAction"
+                class="com.detective.action.InvalidateCacheAction"
+                text="Refresh Include Cache for Gitlab CI"
+                description="Clears the cached remote include files">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+
+</idea-plugin>

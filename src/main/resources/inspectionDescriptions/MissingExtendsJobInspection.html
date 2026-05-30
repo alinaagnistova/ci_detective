@@ -1,0 +1,14 @@
+<html>
+<body>
+Reports <code>extends</code> keywords that reference job templates which cannot be found
+in the current file or any locally included files.
+<br><br>
+<b>Example:</b>
+<pre>
+build-job:
+  extends: .non-existent-job  # highlighted as error
+  script:
+    - echo "build"
+</pre>
+</body>
+</html>

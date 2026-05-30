@@ -1,0 +1,14 @@
+<html>
+<body>
+Обнаруживает ключевые слова <code>extends</code>, ссылающиеся на шаблоны job,
+которые не найдены в текущем файле или подключённых локальных файлах.
+<br><br>
+<b>Пример:</b>
+<pre>
+build-job:
+  extends: .non-existent-job  # подсвечивается как ошибка
+  script:
+    - echo "build"
+</pre>
+</body>
+</html>

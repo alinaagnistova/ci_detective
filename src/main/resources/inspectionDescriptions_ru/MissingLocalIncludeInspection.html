@@ -1,0 +1,12 @@
+<html>
+<body>
+Обнаруживает директивы <code>include: local</code>, ссылающиеся на файлы,
+которые не существуют в проекте.
+<br><br>
+<b>Пример:</b>
+<pre>
+include:
+  - local: '/non-existent-file.yml'  # подсвечивается как ошибка
+</pre>
+</body>
+</html>
