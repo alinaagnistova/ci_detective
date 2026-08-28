@@ -19,6 +19,7 @@ package com.detective.remote
 import com.detective.cache.IncludeCache
 import com.detective.util.GITHUB_DOMAIN
 import com.detective.util.GitlabCiUtil
+import com.detective.util.HEAD_REF
 import com.detective.util.INCLUDE_FILE_KEY
 import com.detective.util.INCLUDE_REMOTE_KEY
 import com.detective.util.MAIN_KEY
@@ -65,6 +66,20 @@ object RemoteIncludeResolver {
         val cacheKey = GitlabCiUtil.templateCacheKey(templateName)
         return resolveWithCache(project, cacheKey) {
             GitLabApiClient.fetchTemplate(templateName).getOrNull()
+        }
+    }
+
+    fun resolveComponent(project: Project, componentString: String): String? {
+        val ref = GitLabComponentParser.parse(componentString) ?: return null
+        val cacheKey = ref.cacheKey
+
+        return resolveWithCache(project, cacheKey) {
+            val resolvedRef = if (ref.version.startsWith("~")) HEAD_REF else ref.version
+            GitLabApiClient.fetchFile(
+                projectPath = ref.projectPath,
+                filePath = ref.filePath,
+                ref = resolvedRef
+            ).getOrNull()
         }
     }
 

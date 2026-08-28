@@ -16,6 +16,7 @@
 
 package com.detective.settings
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.options.Configurable
 import javax.swing.JComponent
 import com.intellij.util.concurrency.AppExecutorUtil
@@ -23,6 +24,8 @@ import com.intellij.util.concurrency.AppExecutorUtil
 class GitlabCiSettingsConfigurable : Configurable {
 
     private var component: GitlabCiSettingsComponent? = null
+    private var loadedGitlabToken: String = ""
+    private var loadedGithubToken: String = ""
 
     override fun getDisplayName() = "CI Detective for Gitlab"
 
@@ -35,9 +38,9 @@ class GitlabCiSettingsConfigurable : Configurable {
         val settings = GitlabCiSettings.getInstance()
         val c = component ?: return false
         return c.gitlabUrl != settings.gitlabUrl ||
-                c.gitlabToken != settings.gitlabToken ||
-                c.githubToken != settings.githubToken ||
-                c.cacheTtlHours != settings.cacheTtlHours
+                c.cacheTtlHours != settings.cacheTtlHours ||
+                c.gitlabToken != loadedGitlabToken ||
+                c.githubToken != loadedGithubToken
     }
 
     override fun apply() {
@@ -56,10 +59,18 @@ class GitlabCiSettingsConfigurable : Configurable {
         val settings = GitlabCiSettings.getInstance()
         val c = component ?: return
         c.gitlabUrl = settings.gitlabUrl
-        c.gitlabToken = settings.gitlabToken
-        c.githubToken = settings.githubToken
         c.cacheTtlHours = settings.cacheTtlHours
 
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val gitlabToken = settings.gitlabToken
+            val githubToken = settings.githubToken
+            loadedGitlabToken = gitlabToken
+            loadedGithubToken = githubToken
+            ApplicationManager.getApplication().invokeLater {
+                c.gitlabToken = gitlabToken
+                c.githubToken = githubToken
+            }
+        }
     }
 
     override fun disposeUIResources() {

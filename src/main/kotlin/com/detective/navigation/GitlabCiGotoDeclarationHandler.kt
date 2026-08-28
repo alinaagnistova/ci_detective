@@ -19,10 +19,13 @@ package com.detective.navigation
 import com.detective.cache.IncludeCache
 import com.detective.messages.CiDetectiveBundle
 import com.detective.remote.GitLabApiClient
+import com.detective.remote.GitLabComponentParser
 import com.detective.remote.RemoteIncludeResolver
 import com.detective.util.EXTENDS_KEY
 import com.detective.util.GITHUB_DOMAIN
 import com.detective.util.GitlabCiUtil
+import com.detective.util.HEAD_REF
+import com.detective.util.INCLUDE_COMPONENT_KEY
 import com.detective.util.INCLUDE_FILE_KEY
 import com.detective.util.INCLUDE_LOCAL_KEY
 import com.detective.util.INCLUDE_REMOTE_KEY
@@ -51,7 +54,6 @@ import java.io.File
 class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
     private val log = Logger.getInstance(GitlabCiGotoDeclarationHandler::class.java)
 
-
     override fun getGotoDeclarationTargets(
         sourceElement: PsiElement?,
         offset: Int,
@@ -62,17 +64,12 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
         val file = sourceElement.containingFile ?: return null
         if (!GitlabCiUtil.isGitlabCiFile(file)) return null
 
-        log.info("CI-DETECTIVE: hover element=${sourceElement::class.simpleName} " +
-                "parent=${sourceElement.parent::class.simpleName} " +
-                "parent2=${sourceElement.parent?.parent?.javaClass?.simpleName}")
-
         val aliasResult = resolveYamlAlias(sourceElement, file)
         if (aliasResult != null) return aliasResult
 
-        val scalar = sourceElement.parent as? YAMLScalar
-            ?: (sourceElement as? YAMLScalar)
-            ?: sourceElement.parent?.parent as? YAMLScalar
-            ?: return null
+        val scalar = generateSequence(sourceElement) { it.parent }
+            .filterIsInstance<YAMLScalar>()
+            .firstOrNull() ?: return null
 
         val keyValue = scalar.parent as? YAMLKeyValue
             ?: scalar.parent?.parent?.parent as? YAMLKeyValue
@@ -84,6 +81,7 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
             INCLUDE_FILE_KEY -> resolveGitLabFileInclude(scalar, file, sourceElement)
             INCLUDE_REMOTE_KEY -> resolveRemoteInclude(scalar, file, sourceElement)
             INCLUDE_TEMPLATE_KEY -> resolveTemplateInclude(scalar, file, sourceElement)
+            INCLUDE_COMPONENT_KEY -> resolveComponentInclude(scalar, file, sourceElement)
             else -> null
         }
     }
@@ -154,11 +152,6 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
 
         loadFromCacheOrNull(info.cacheKey, cache, project, file)?.let { return it }
 
-        if (!GitLabApiClient.isTokenConfigured()) {
-            showTokenWarningOnce(project)
-            return null
-        }
-
         val cacheFilePath = cache.getCacheFilePath(info.cacheKey) ?: return null
         ProgressManager.getInstance().run(
             object : Task.Backgroundable(
@@ -167,6 +160,10 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
                 true
             ) {
                 override fun run(indicator: ProgressIndicator) {
+                    if (!GitLabApiClient.isTokenConfigured()) {
+                        showTokenWarningOnce(project)
+                        return
+                    }
                     RemoteIncludeResolver.resolveGitLabFile(
                         project, info.projectPath, info.filePath, info.ref
                     ) ?: return
@@ -228,11 +225,6 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
 
         loadFromCacheOrNull(cacheKey, cache, project, file)?.let { return it }
 
-        if (!GitLabApiClient.isTokenConfigured()) {
-            showTokenWarningOnce(project)
-            return null
-        }
-
         val cacheFilePath = cache.getCacheFilePath(cacheKey) ?: return null
         ProgressManager.getInstance().run(
             object : Task.Backgroundable(
@@ -241,8 +233,51 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
                 true
             ) {
                 override fun run(indicator: ProgressIndicator) {
+                    if (!GitLabApiClient.isTokenConfigured()) {
+                        showTokenWarningOnce(project)
+                        return
+                    }
                     val content = RemoteIncludeResolver.resolveTemplate(project, templateName) ?: return
                     cache.put(cacheKey, content)
+                    refreshAndRestart(cacheFilePath, project, file)
+                }
+            }
+        )
+        return null
+    }
+
+    private fun resolveComponentInclude(
+        scalar: YAMLScalar,
+        file: PsiFile,
+        sourceElement: PsiElement
+    ): Array<PsiElement>? {
+        val keyValue = scalar.parent as? YAMLKeyValue ?: return null
+        if (!GitlabCiUtil.isInsideInclude(keyValue)) return null
+
+        val componentString = scalar.textValue.ifBlank { return null }
+        val project = sourceElement.project
+        val cache = IncludeCache.getInstance(project)
+        val componentRef = GitLabComponentParser.parse(componentString) ?: return null
+        val cacheKey = GitlabCiUtil.gitlabCacheKey(
+            componentRef.projectPath,
+            componentRef.version.removePrefix("~").let { if (it == LATEST_REF) HEAD_REF else it },
+            componentRef.filePath
+        )
+        loadFromCacheOrNull(cacheKey, cache, project, file)?.let { return it }
+
+        val cacheFilePath = cache.getCacheFilePath(cacheKey) ?: return null
+        ProgressManager.getInstance().run(
+            object : Task.Backgroundable(
+                project,
+                CiDetectiveBundle.progressMessage("progress.loading.component"),
+                true
+            ) {
+                override fun run(indicator: ProgressIndicator) {
+                    if (!GitLabApiClient.isTokenConfigured()) {
+                        showTokenWarningOnce(project)
+                        return
+                    }
+                    RemoteIncludeResolver.resolveComponent(project, componentString) ?: return
                     refreshAndRestart(cacheFilePath, project, file)
                 }
             }
@@ -266,11 +301,6 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
             .firstNotNullOfOrNull { GitlabCiUtil.findJobInFile(it as? YAMLFile, jobName) }
             ?.let { return arrayOf(it) }
 
-        if (!GitLabApiClient.isTokenConfigured()) {
-            showTokenWarningOnce(project)
-            return null
-        }
-
         ProgressManager.getInstance().run(
             object : Task.Backgroundable(
                 project,
@@ -278,6 +308,10 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
                 true
             ) {
                 override fun run(indicator: ProgressIndicator) {
+                    if (!GitLabApiClient.isTokenConfigured()) {
+                        showTokenWarningOnce(project)
+                        return
+                    }
                     ApplicationManager.getApplication().runReadAction {
                         GitlabCiUtil.collectAllIncludedFiles(file, project)
                     }
@@ -303,15 +337,16 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
         if (ioFile.canWrite()) ioFile.setReadOnly()
 
         val virtualFile = LocalFileSystem.getInstance().findFileByPath(cacheFilePath)
-        if (virtualFile != null) {
-            return PsiManager.getInstance(project).findFile(virtualFile)?.let { arrayOf(it) }
-        }
+            ?: LocalFileSystem.getInstance().refreshAndFindFileByPath(cacheFilePath)
+            ?: run {
+                ApplicationManager.getApplication().invokeLater {
+                    LocalFileSystem.getInstance().refreshAndFindFileByPath(cacheFilePath)
+                    if (!project.isDisposed) DaemonCodeAnalyzer.getInstance(project).restart(sourceFile)
+                }
+                return null
+            }
 
-        ApplicationManager.getApplication().invokeLater {
-            LocalFileSystem.getInstance().refreshAndFindFileByPath(cacheFilePath)
-            if (!project.isDisposed) DaemonCodeAnalyzer.getInstance(project).restart(sourceFile)
-        }
-        return null
+        return PsiManager.getInstance(project).findFile(virtualFile)?.let { arrayOf(it) }
     }
 
     private fun refreshAndRestart(cacheFilePath: String, project: Project, file: PsiFile) {
@@ -331,6 +366,7 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
         private const val TOKEN_WARNING_COOLDOWN_MS = 30_000L
         private const val PLUGIN_NAME = "CI Detective for Gitlab"
         private const val NOTIFICATION_GROUP = "CI Detective"
+        private const val LATEST_REF = "latest"
 
         @Volatile
         private var lastTokenWarningTime = 0L

@@ -18,10 +18,12 @@ package com.detective.background
 
 import com.detective.cache.IncludeCache
 import com.detective.messages.CiDetectiveBundle
+import com.detective.remote.GitLabComponentParser
 import com.detective.remote.RemoteIncludeResolver
 import com.detective.util.CACHE_DIR_PATH
 import com.detective.util.GITHUB_DOMAIN
 import com.detective.util.GitlabCiUtil
+import com.detective.util.INCLUDE_COMPONENT_KEY
 import com.detective.util.INCLUDE_FILE_KEY
 import com.detective.util.INCLUDE_KEY
 import com.detective.util.INCLUDE_REMOTE_KEY
@@ -115,30 +117,30 @@ class IncludeIndexingTask(
 
     private fun downloadAndCache(include: RemoteInclude): String? {
         val cache = IncludeCache.getInstance(project)
-
-        if (cache.contains(include.cacheKey) && !cache.isStale(include.cacheKey)) {
-            return cache.get(include.cacheKey)
-        }
-
-        val content = when (include) {
-            is RemoteInclude.GitLabFile -> RemoteIncludeResolver.resolveGitLabFile(
-                project, include.projectPath, include.filePath, include.ref
-            )
-            is RemoteInclude.RemoteUrl -> if (include.url.contains(GITHUB_DOMAIN)) {
-                RemoteIncludeResolver.resolveGitHubFile(project, include.url)
-            } else {
-                RemoteIncludeResolver.resolveRemoteUrl(project, include.url)
+        synchronized(include.cacheKey.intern()) {
+            if (cache.contains(include.cacheKey) && !cache.isStale(include.cacheKey)) {
+                return cache.get(include.cacheKey)
             }
-        } ?: return null
 
-        val cacheFilePath = cache.getCacheFilePath(include.cacheKey) ?: return null
-        writeToCacheFile(cacheFilePath, content)
-        cache.putAsync(include.cacheKey, content)
-        ApplicationManager.getApplication().invokeLater {
-            LocalFileSystem.getInstance().refreshAndFindFileByPath(cacheFilePath)
+            val content = when (include) {
+                is RemoteInclude.GitLabFile -> RemoteIncludeResolver.resolveGitLabFile(
+                    project, include.projectPath, include.filePath, include.ref
+                )
+
+                is RemoteInclude.RemoteUrl -> if (include.url.contains(GITHUB_DOMAIN)) {
+                    RemoteIncludeResolver.resolveGitHubFile(project, include.url)
+                } else {
+                    RemoteIncludeResolver.resolveRemoteUrl(project, include.url)
+                }
+            } ?: return null
+
+            val cacheFilePath = cache.getCacheFilePath(include.cacheKey) ?: return null
+            cache.putAsync(include.cacheKey, content)
+            ApplicationManager.getApplication().invokeLater {
+                LocalFileSystem.getInstance().refreshAndFindFileByPath(cacheFilePath)
+            }
+            return content
         }
-
-        return content
     }
 
     private fun parseYamlContent(content: String, name: String): PsiFile? {
@@ -189,6 +191,23 @@ class IncludeIndexingTask(
             .forEach { kv ->
                 val url = getTextValue(kv) ?: return@forEach
                 if (visited.add(url)) queue.add(RemoteInclude.RemoteUrl(url = url, depth = depth))
+            }
+
+        PsiTreeUtil.findChildrenOfType(file, YAMLKeyValue::class.java)
+            .filter { it.keyText == INCLUDE_COMPONENT_KEY && GitlabCiUtil.isInsideInclude(it) }
+            .forEach { kv ->
+                val componentString = getTextValue(kv) ?: return@forEach
+                val ref = GitLabComponentParser.parse(componentString) ?: return@forEach
+                if (visited.add(ref.cacheKey)) {
+                    queue.add(
+                        RemoteInclude.GitLabFile(
+                            projectPath = ref.projectPath,
+                            filePath = ref.filePath,
+                            ref = ref.version.removePrefix("~"),
+                            depth = depth
+                        )
+                    )
+                }
             }
 
         GitlabCiUtil.collectIncludedFiles(file, file.project)

@@ -17,6 +17,7 @@
 package com.detective.util
 
 import com.detective.cache.IncludeCache
+import com.detective.remote.GitLabComponentParser
 import com.detective.remote.RemoteIncludeResolver
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
@@ -99,6 +100,15 @@ object GitlabCiUtil {
                 val templateName = (kv.value as? YAMLScalar)?.textValue ?: return@forEach
                 RemoteIncludeResolver.resolveTemplate(project, templateName) ?: return@forEach
                 openFromCache(cache, templateCacheKey(templateName), project)
+                    ?.let { result.add(it) }
+            }
+
+        PsiTreeUtil.findChildrenOfType(file, YAMLKeyValue::class.java)
+            .filter { it.keyText == INCLUDE_COMPONENT_KEY && isInsideInclude(it) }
+            .forEach { kv ->
+                val componentString = (kv.value as? YAMLScalar)?.textValue ?: return@forEach
+                RemoteIncludeResolver.resolveComponent(project, componentString) ?: return@forEach
+                openFromCache(cache, componentCacheKey(componentString), project)
                     ?.let { result.add(it) }
             }
 
@@ -224,6 +234,13 @@ object GitlabCiUtil {
                 openIfCached(templateCacheKey(templateName))
             }
 
+        PsiTreeUtil.findChildrenOfType(file, YAMLKeyValue::class.java)
+            .filter { it.keyText == INCLUDE_COMPONENT_KEY && isInsideInclude(it) }
+            .forEach { kv ->
+                val componentString = (kv.value as? YAMLScalar)?.textValue ?: return@forEach
+                openIfCached(componentCacheKey(componentString))
+            }
+
         return result
     }
 
@@ -312,6 +329,11 @@ object GitlabCiUtil {
         "gitlab:$projectPath:$ref:$filePath"
 
     fun templateCacheKey(templateName: String) = "template:$templateName"
+
+    fun componentCacheKey(componentString: String): String {
+        val ref = GitLabComponentParser.parse(componentString)
+        return ref?.cacheKey ?: "component:$componentString"
+    }
 
     private fun openFromCache(cache: IncludeCache, cacheKey: String, project: Project): PsiFile? {
         val cacheFilePath = cache.getCacheFilePath(cacheKey) ?: return null

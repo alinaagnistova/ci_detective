@@ -21,6 +21,7 @@ const val INCLUDE_LOCAL_KEY = "local"
 const val INCLUDE_FILE_KEY = "file"
 const val INCLUDE_REMOTE_KEY = "remote"
 const val INCLUDE_TEMPLATE_KEY = "template"
+ const val INCLUDE_COMPONENT_KEY = "component"
 const val EXTENDS_KEY = "extends"
 const val GITHUB_DOMAIN = "github.com"
 const val CACHE_DIR_PATH = ".idea/gitlab-ci-cache"
@@ -29,10 +30,12 @@ const val INCLUDE_KEY = "include"
 const val PROJECT_KEY = "project"
 const val REF_KEY = "ref"
 const val MAIN_KEY = "main"
+const val HEAD_REF = "HEAD"
 
 val INCLUDE_DIRECTIVES = setOf(
     INCLUDE_LOCAL_KEY,
     INCLUDE_FILE_KEY,
     INCLUDE_REMOTE_KEY,
     INCLUDE_TEMPLATE_KEY,
+    INCLUDE_COMPONENT_KEY
 )

@@ -18,8 +18,10 @@ package com.detective.documentation
 
 import com.detective.cache.IncludeCache
 import com.detective.messages.CiDetectiveBundle
+import com.detective.remote.GitLabComponentParser
 import com.detective.util.EXTENDS_KEY
 import com.detective.util.GitlabCiUtil
+import com.detective.util.INCLUDE_COMPONENT_KEY
 import com.detective.util.INCLUDE_FILE_KEY
 import com.detective.util.INCLUDE_LOCAL_KEY
 import com.detective.util.INCLUDE_REMOTE_KEY
@@ -49,6 +51,7 @@ class GitlabCiDocumentationProvider : DocumentationProvider {
             INCLUDE_LOCAL_KEY -> generateLocalIncludeDoc(scalar, file)
             INCLUDE_FILE_KEY -> generateGitLabFileDoc(scalar, keyValue!!, file)
             INCLUDE_REMOTE_KEY -> generateRemoteDoc(scalar, file)
+            INCLUDE_COMPONENT_KEY -> generateComponentDoc(scalar, file)
             EXTENDS_KEY -> generateExtendsDoc(scalar, file)
             else -> null
         }
@@ -107,6 +110,21 @@ class GitlabCiDocumentationProvider : DocumentationProvider {
             title = CiDetectiveBundle.message("doc.title.remote"),
             subtitle = url.substringAfterLast("/"),
             extra = url,
+            jobs = jobs
+        )
+    }
+
+    private fun generateComponentDoc(scalar: YAMLScalar, file: PsiElement): String? {
+        val componentString = scalar.textValue.ifBlank { return null }
+        val ref = GitLabComponentParser.parse(componentString)
+            ?: return buildNotFoundDoc(CiDetectiveBundle.message("doc.component.not.found", componentString))
+
+        val jobs = extractJobsFromCache(ref.cacheKey, file)
+
+        return buildIncludeDoc(
+            title = CiDetectiveBundle.message("doc.title.component"),
+            subtitle = "${ref.projectPath}/${ref.componentName}",
+            extra = "@${ref.version}",
             jobs = jobs
         )
     }
