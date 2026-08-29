@@ -127,10 +127,21 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
         val path = scalar.textValue.trimStart('/')
         if (path.isBlank()) return null
 
-        val baseDir = file.virtualFile?.parent ?: return null
-        val targetFile = baseDir.findFileByRelativePath(path) ?: return null
-        return PsiManager.getInstance(sourceElement.project).findFile(targetFile)
-            ?.let { arrayOf(it) }
+        val baseDir = file.virtualFile?.parent
+        val targetFile = baseDir?.findFileByRelativePath(path)
+
+        if (targetFile != null) {
+            return PsiManager.getInstance(sourceElement.project)
+                .findFile(targetFile)?.let { arrayOf(it) }
+        }
+
+        val projectBase = LocalFileSystem.getInstance()
+            .findFileByPath(sourceElement.project.basePath ?: return null)
+        val targetFromProject = projectBase?.findFileByRelativePath(path)
+        return targetFromProject?.let {
+            PsiManager.getInstance(sourceElement.project)
+                .findFile(it)?.let { psi -> arrayOf(psi) }
+        }
     }
 
     private fun resolveGitLabFileInclude(
@@ -337,13 +348,11 @@ class GitlabCiGotoDeclarationHandler : GotoDeclarationHandler {
         if (ioFile.canWrite()) ioFile.setReadOnly()
 
         val virtualFile = LocalFileSystem.getInstance().findFileByPath(cacheFilePath)
-            ?: LocalFileSystem.getInstance().refreshAndFindFileByPath(cacheFilePath)
-            ?: run {
+            ?: return null.also {
                 ApplicationManager.getApplication().invokeLater {
                     LocalFileSystem.getInstance().refreshAndFindFileByPath(cacheFilePath)
                     if (!project.isDisposed) DaemonCodeAnalyzer.getInstance(project).restart(sourceFile)
                 }
-                return null
             }
 
         return PsiManager.getInstance(project).findFile(virtualFile)?.let { arrayOf(it) }

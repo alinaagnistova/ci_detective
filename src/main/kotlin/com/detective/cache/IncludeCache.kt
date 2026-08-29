@@ -126,7 +126,13 @@ class IncludeCache(private val project: Project) {
         val hash = MessageDigest.getInstance(HASH_ALGORITHM)
             .digest(url.toByteArray())
             .joinToString("") { "%02x".format(it) }
-        return cacheDir.resolve("$hash.yml").toFile()
+            .take(8)
+        val readableName: String = buildString {
+            val parts = url.split(":")
+            if (parts.size >= 2) append(parts[1].substringAfterLast("/").take(20) + "_")
+            append(url.substringAfterLast("/").replace(Regex("[^a-zA-Z0-9._-]"), "_").take(30))
+        }
+        return cacheDir.resolve("${readableName}_${hash}.yml").toFile()
     }
 
     companion object {

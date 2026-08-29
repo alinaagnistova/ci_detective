@@ -18,29 +18,53 @@ package com.detective.settings
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.options.Configurable
-import javax.swing.JComponent
 import com.intellij.util.concurrency.AppExecutorUtil
+import javax.swing.JComponent
 
 class GitlabCiSettingsConfigurable : Configurable {
 
     private var component: GitlabCiSettingsComponent? = null
-    private var loadedGitlabToken: String = ""
-    private var loadedGithubToken: String = ""
+    @Volatile private var loadedGitlabToken: String = ""
+    @Volatile private var loadedGithubToken: String = ""
+    @Volatile private var tokensLoaded: Boolean = false
 
     override fun getDisplayName() = "CI Detective for Gitlab"
 
     override fun createComponent(): JComponent {
         component = GitlabCiSettingsComponent()
+        val settings = GitlabCiSettings.getInstance()
+
+        if (tokensLoaded) {
+            component?.gitlabToken = loadedGitlabToken
+            component?.githubToken = loadedGithubToken
+        }
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val gitlabToken = settings.gitlabToken
+            val githubToken = settings.githubToken
+            loadedGitlabToken = gitlabToken
+            loadedGithubToken = githubToken
+            tokensLoaded = true
+            ApplicationManager.getApplication().invokeLater {
+                component?.gitlabToken = gitlabToken
+                component?.githubToken = githubToken
+            }
+        }
         return component!!.panel
     }
 
     override fun isModified(): Boolean {
         val settings = GitlabCiSettings.getInstance()
         val c = component ?: return false
-        return c.gitlabUrl != settings.gitlabUrl ||
-                c.cacheTtlHours != settings.cacheTtlHours ||
-                c.gitlabToken != loadedGitlabToken ||
-                c.githubToken != loadedGithubToken
+
+        if (c.gitlabUrl != settings.gitlabUrl) return true
+        if (c.cacheTtlHours != settings.cacheTtlHours) return true
+
+        if (!tokensLoaded) return false
+        if (c.gitlabToken != loadedGitlabToken) return true
+        if (c.githubToken != loadedGithubToken) return true
+
+        return false
     }
 
     override fun apply() {
@@ -49,10 +73,15 @@ class GitlabCiSettingsConfigurable : Configurable {
         settings.gitlabUrl = c.gitlabUrl
         settings.cacheTtlHours = c.cacheTtlHours
 
+        val newGitlabToken = c.gitlabToken
+        val newGithubToken = c.githubToken
+
         AppExecutorUtil.getAppExecutorService().submit {
-                settings.gitlabToken = c.gitlabToken
-                settings.githubToken = c.githubToken
-            }
+            settings.gitlabToken = newGitlabToken
+            settings.githubToken = newGithubToken
+            loadedGitlabToken = newGitlabToken
+            loadedGithubToken = newGithubToken
+        }
     }
 
     override fun reset() {
@@ -60,16 +89,9 @@ class GitlabCiSettingsConfigurable : Configurable {
         val c = component ?: return
         c.gitlabUrl = settings.gitlabUrl
         c.cacheTtlHours = settings.cacheTtlHours
-
-        ApplicationManager.getApplication().executeOnPooledThread {
-            val gitlabToken = settings.gitlabToken
-            val githubToken = settings.githubToken
-            loadedGitlabToken = gitlabToken
-            loadedGithubToken = githubToken
-            ApplicationManager.getApplication().invokeLater {
-                c.gitlabToken = gitlabToken
-                c.githubToken = githubToken
-            }
+        if (tokensLoaded) {
+            c.gitlabToken = loadedGitlabToken
+            c.githubToken = loadedGithubToken
         }
     }
 

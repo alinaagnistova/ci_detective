@@ -53,7 +53,7 @@ intellijPlatform {
 
         ideaVersion {
             sinceBuild = "223"
-            untilBuild = "261.*"
+            untilBuild = "262.*"
         }
     }
 }
@@ -67,7 +67,7 @@ tasks {
     }
     patchPluginXml {
         sinceBuild.set("223")
-        untilBuild.set("261.*")
+        untilBuild.set("262.*")
     }
     test {
         useJUnitPlatform()

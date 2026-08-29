@@ -9,7 +9,7 @@
         Supports include directives, extends navigation, and validation.
     </description>
 
-    <idea-version since-build="223" until-build="261.*"/>
+    <idea-version since-build="223" until-build="262.*"/>
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.plugins.yaml</depends>
 

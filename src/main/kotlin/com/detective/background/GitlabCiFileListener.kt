@@ -17,19 +17,21 @@
 package com.detective.background
 
 import com.detective.onboarding.GitlabCiOnboardingService
+import com.detective.util.CACHE_DIR_NAME
 import com.detective.util.GitlabCiUtil
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.psi.PsiManager
 
 class GitlabCiFileListener : FileEditorManagerListener {
-
     override fun selectionChanged(event: FileEditorManagerEvent) {
         val project = event.manager.project
         val file = event.newFile ?: return
         val psiFile = PsiManager.getInstance(project).findFile(file) ?: return
 
         if (!GitlabCiUtil.isGitlabCiFile(psiFile)) return
+
+        if (file.path.contains(CACHE_DIR_NAME)) return
 
         GitlabCiOnboardingService.getInstance(project).showIfNeeded()
         IncludeIndexingTask.schedule(project, psiFile)

@@ -16,10 +16,12 @@
 
 package com.detective.util
 
+import com.detective.background.IncludeIndexingTask
 import com.detective.cache.IncludeCache
 import com.detective.remote.GitLabComponentParser
 import com.detective.remote.RemoteIncludeResolver
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -37,9 +39,15 @@ import java.io.File
 
 object GitlabCiUtil {
 
+    private val log = Logger.getInstance(IncludeIndexingTask::class.java)
+
     private val GITLAB_CI_FILENAMES = setOf(".gitlab-ci.yml", ".gitlab-ci.yaml")
 
-    fun isGitlabCiFile(file: PsiFile): Boolean = file.name in GITLAB_CI_FILENAMES
+    fun isGitlabCiFile(file: PsiFile): Boolean {
+        if (GITLAB_CI_FILENAMES.any { file.name.endsWith(it)}) return true
+        val path = file.virtualFile?.path ?: return false
+        return path.contains(CACHE_DIR_NAME)
+    }
 
     fun isInsideInclude(element: PsiElement): Boolean {
         var parent = element.parent

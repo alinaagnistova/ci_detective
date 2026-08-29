@@ -110,9 +110,12 @@ class IncludeIndexingTask(
 
     private fun restartDaemon() {
         if (project.isDisposed) return
-        val pf = PsiManager.getInstance(project)
-            .findFile(psiFile.virtualFile ?: return) ?: return
-        DaemonCodeAnalyzer.getInstance(project).restart(pf)
+        ApplicationManager.getApplication().runReadAction {
+            val virtualFile = psiFile.virtualFile ?: return@runReadAction
+            if (!virtualFile.isValid) return@runReadAction
+            val pf = PsiManager.getInstance(project).findFile(virtualFile) ?: return@runReadAction
+            DaemonCodeAnalyzer.getInstance(project).restart(pf)
+        }
     }
 
     private fun downloadAndCache(include: RemoteInclude): String? {
